@@ -1,0 +1,18 @@
+{
+  "id": "12345678-1234-1234-1234-123456789012",
+  "name": "OpenClaw Contract Management",
+  "publisher": "OpenClaw",
+  "version": "1.0.0.0",
+  "platform": "1.0.0.0",
+  "application": "24.0.0.0",
+  "runtime": "13.0",
+  "description": "Contract management and recurring billing extension for Business Central SaaS",
+  "features": [],
+  "idRange": {
+    "start": 50100,
+    "end": 50149
+  },
+  "dependencies": [],
+  "showMyCode": true,
+  "target": "SaaS"
+}

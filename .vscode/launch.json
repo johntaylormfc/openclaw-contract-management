@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "al",
+            "request": "launch",
+            "name": "Your own cloud sandbox",
+            "mode": "Sandbox",
+            "url": "https://businesscentral.dynamics.com/Sandbox/?company=MyCompany&branch=main",
+            "schemaUpdateMode": "ForceSync",
+            "application": "https://api.businesscentral.dynamics.com/v2.0/sandbox/api/v2.0",
+            "tenant": "https://businesscentral.dynamics.com",
+            "authentication": "AAD"
+        },
+        {
+            "type": "al",
+            "request": "launch",
+            "name": "Your own production",
+            "mode": "Runtime",
+            "runtimePackageId": "YourRuntimePackageAppId",
+            "schemaUpdateMode": "ForceSync",
+            "target": "Cloud"
+        }
+    ]
+}
