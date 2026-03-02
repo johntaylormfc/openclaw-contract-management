@@ -1,0 +1,30 @@
+{
+  "id": "bcdev-contracts",
+  "name": "BC Dev Contract Management",
+  "publisher": "BC Dev Limited",
+  "version": "1.0.0.0",
+  "brief": "Contract management extension for Business Central",
+  "description": "Comprehensive contract management with No.Series, approval workflow, archiving, and status transitions.",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [
+    {
+      "id": "Microsoft.System.Application",
+      "version": "1.0.0.0",
+      "publisher": "Microsoft"
+    }
+  ],
+  "screenshots": [],
+  "platform": "1.0.0.0",
+  "application": "24.0.0.0",
+  "idRanges": [
+    {
+      "from": 50100,
+      "to": 50199
+    }
+  ],
+  "runtime": "13.0"
+}
