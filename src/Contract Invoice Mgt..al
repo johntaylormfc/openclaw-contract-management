@@ -2,12 +2,14 @@ codeunit 50101 "Contract Invoice Mgt."
 {
     procedure CreateSalesDocsFromContractBilling(AsOfDate: Date; PostMode: Enum "Contract Invoice Post Mode")
     var
+        RunLog: Record "Contract Billing Run Log";
         ContractBilling: Record "Contract Billing";
         ContractHeader: Record "Contract Header";
         ContractLine: Record "Contract Line";
         SalesHeader: Record "Sales Header";
         SalesLine: Record "Sales Line";
         Customer: Record Customer;
+        RunId: GUID;
         NextBillingLineNo: Integer;
         DocumentNo: Code[20];
         LineNo: Integer;
@@ -22,10 +24,22 @@ codeunit 50101 "Contract Invoice Mgt."
         CurrentPaymentTerms: Code[10];
         CurrentPaymentMethod: Code[10];
     begin
+        // Create run log entry
+        RunId := CreateGuid();
+        RunLog.Init();
+        RunLog."Run ID" := RunId;
+        RunLog."Started At" := CurrentDateTime;
+        RunLog."As of Date" := AsOfDate;
+        RunLog."Post Mode" := Format(PostMode);
+        RunLog."User ID" := UserId;
+        RunLog.Success := false;
+        RunLog.Insert();
+
         // Find eligible unbilled details
         ContractBilling.SetRange(Billed, false);
         ContractBilling.SetFilter("Next Invoice Date", '<=%1', AsOfDate);
         ContractBilling.SetCurrentKey("Contract No.", "Contract Line No.", "Next Invoice Date");
+        
         if ContractBilling.FindSet() then begin
             repeat
                 // Check header and line status
@@ -43,9 +57,12 @@ codeunit 50101 "Contract Invoice Mgt."
                     // Create new document for new customer
                     if SalesHeader."No." <> '' then begin
                         // Post or save previous document
-                        if PostMode = PostMode::"Create and Post" then
-                            PostSalesHeader(SalesHeader)
-                        else
+                        if PostMode = PostMode::"Create and Post" then begin
+                            if not PostSalesHeader(SalesHeader) then begin
+                                ErrorsOccurred := true;
+                                ErrorText := CopyStr(ErrorText + 'Failed to post invoice. ', 1, 250);
+                            end;
+                        end else
                             SalesHeader.Insert();
                     end;
 
@@ -58,9 +75,14 @@ codeunit 50101 "Contract Invoice Mgt."
                     SalesHeader."Currency Code" := ContractHeader."Currency Code";
                     SalesHeader."Payment Terms Code" := ContractHeader."Payment Terms Code";
                     SalesHeader."Payment Method Code" := ContractHeader."Payment Method Code";
-                    SalesHeader."Posting Date" := AsOfHeader;
+                    SalesHeader."Posting Date" := AsOfDate;
                     SalesHeader."Your Reference" := ContractHeader."Contract No.";
-                    SalesHeader.Insert(true);
+                    
+                    if not SalesHeader.Insert(true) then begin
+                        ErrorsOccurred := true;
+                        ErrorText := CopyStr(ErrorText + 'Failed to create invoice. ', 1, 250);
+                        continue;
+                    end;
 
                     CurrentCustomerNo := ContractHeader."Sell-to Customer No.";
                     CurrentBillToNo := ContractHeader."Bill-to Customer No.";
@@ -78,14 +100,28 @@ codeunit 50101 "Contract Invoice Mgt."
                 SalesLine."Document No." := SalesHeader."No.";
                 LineNo += 10000;
                 SalesLine."Line No." := LineNo;
-                SalesLine.Type := SalesLine.Type::Item;
+                
+                // Map contract line type to sales line type
+                case ContractLine.Type of
+                    ContractLine.Type::Item:
+                        SalesLine.Type := SalesLine.Type::Item;
+                    ContractLine.Type::Resource:
+                        SalesLine.Type := SalesLine.Type::Resource;
+                    ContractLine.Type::Comment:
+                        SalesLine.Type := SalesLine.Type::" ";
+                end;
+                
                 SalesLine."No." := ContractLine."Item No.";
                 SalesLine.Description := ContractLine.Description;
                 SalesLine.Quantity := ContractBilling."Quantity to Invoice";
                 SalesLine."Unit Price" := ContractBilling."Unit Price";
                 SalesLine.Amount := ContractBilling.Amount;
-                SalesLine."VAT Base Amount" := ContractBilling.Amount;
-                SalesLine.Insert(true);
+                
+                if not SalesLine.Insert(true) then begin
+                    ErrorsOccurred := true;
+                    ErrorText := CopyStr(ErrorText + 'Failed to create line. ', 1, 250);
+                    continue;
+                end;
 
                 // Mark as billed
                 ContractBilling.Billed := true;
@@ -99,15 +135,27 @@ codeunit 50101 "Contract Invoice Mgt."
 
             // Insert last document
             if SalesHeader."No." <> '' then begin
-                if PostMode = PostMode::"Create and Post" then
-                    PostSalesHeader(SalesHeader)
-                else
+                if PostMode = PostMode::"Create and Post" then begin
+                    if not PostSalesHeader(SalesHeader) then begin
+                        ErrorsOccurred := true;
+                        ErrorText := CopyStr(ErrorText + 'Failed to post final invoice. ', 1, 250);
+                    end
+                end else
                     SalesHeader.Insert();
             end;
         end;
 
         // Refresh summaries
         RefreshAllSummaries();
+
+        // Update run log
+        RunLog."Ended At" := CurrentDateTime;
+        RunLog."Groups Created" := GroupsCreated;
+        RunLog."Lines Created" := LinesCreated;
+        RunLog."Total Amount" := TotalAmount;
+        RunLog.Success := not ErrorsOccurred;
+        RunLog."Error Text" := CopyStr(ErrorText, 1, 250);
+        RunLog.Modify();
 
         // Log results
         Message('Contract billing completed.\nGroups created: %1\nLines created: %2\nTotal amount: %3',
@@ -129,11 +177,12 @@ codeunit 50101 "Contract Invoice Mgt."
         exit(true);
     end;
 
-    local procedure PostSalesHeader(SalesHeader: Record "Sales Header")
+    local procedure PostSalesHeader(SalesHeader: Record "Sales Header"): Boolean
     var
         SalesPost: Codeunit "Sales-Post";
     begin
         SalesPost.Run(SalesHeader);
+        exit(SalesHeader."No." <> '');
     end;
 
     local procedure RefreshAllSummaries()
@@ -142,12 +191,31 @@ codeunit 50101 "Contract Invoice Mgt."
         ContractBillingMgt: Codeunit "Contract Billing Mgt.";
     begin
         // Refresh all line summaries
+        ContractLine.SetRange("Contract No.");
         if ContractLine.FindSet() then
             repeat
                 ContractBillingMgt.RefreshHeaderAndLineSummary(ContractLine."Contract No.", ContractLine."Line No.");
             until ContractLine.Next() = 0;
     end;
 
+    procedure GetRunLog(var RunLog: Record "Contract Billing Run Log")
+    begin
+        RunLog.SetCurrentKey("Started At");
+        RunLog.SetAscending("Started At", false);
+        RunLog.SetRange("Started At", CreateDateTime(Today - 30, 0DT), CreateDateTime(Today, 235959T));
+    end;
+
+    procedure GetPostModeCreateOnly(): Enum "Contract Invoice Post Mode"
     var
-        AsOfHeader: Date;
+        PostMode: Enum "Contract Invoice Post Mode";
+    begin
+        exit(PostMode::"Create Only");
+    end;
+
+    procedure GetPostModeCreateAndPost(): Enum "Contract Invoice Post Mode"
+    var
+        PostMode: Enum "Contract Invoice Post Mode";
+    begin
+        exit(PostMode::"Create and Post");
+    end;
 }

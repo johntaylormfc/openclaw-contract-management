@@ -122,6 +122,8 @@ table 50101 "Contract Line"
     }
 
     trigger OnInsert()
+    var
+        ContractBillingMgt: Codeunit "Contract Billing Mgt.";
     begin
         if "Contract No." = '' then
             Error('Contract No. must be specified');
@@ -134,5 +136,35 @@ table 50101 "Contract Line"
             else
                 "Line No." := 10000;
         end;
+
+        // Auto-generate billing details for new active lines
+        if Status = Status::Active then
+            ContractBillingMgt.GenerateDetailsForLine(Rec);
+    end;
+
+    trigger OnModify()
+    var
+        ContractBillingMgt: Codeunit "Contract Billing Mgt.";
+    begin
+        // Rebuild unbilled details if relevant fields changed
+        if (xRec.Quantity <> Quantity) or
+           (xRec."Unit Price" <> "Unit Price") or
+           (xRec."Start Date" <> "Start Date") or
+           (xRec."End Date" <> "End Date") or
+           (xRec.Frequency <> Frequency) or
+           (xRec.Interval <> Interval) or
+           (xRec.Status <> Status) then
+            ContractBillingMgt.RebuildUnbilledDetailsForLine(Rec);
+    end;
+
+    trigger OnDelete()
+    var
+        ContractBilling: Record "Contract Billing";
+    begin
+        // Delete unbilled billing details when line is deleted
+        ContractBilling.SetRange("Contract No.", "Contract No.");
+        ContractBilling.SetRange("Contract Line No.", "Line No.");
+        ContractBilling.SetRange(Billed, false);
+        ContractBilling.DeleteAll();
     end;
 }

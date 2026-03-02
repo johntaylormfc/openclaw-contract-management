@@ -123,7 +123,25 @@ table 50100 "Contract Header"
     end;
 
     trigger OnModify()
+    var
+        ContractLine: Record "Contract Line";
+        ContractBillingMgt: Codeunit "Contract Billing Mgt.";
     begin
         // Trigger rebuild of unbilled details if relevant fields changed
+        if (xRec."Start Date" <> "Start Date") or
+           (xRec."End Date" <> "End Date") or
+           (xRec.Frequency <> Frequency) or
+           (xRec.Interval <> Interval) or
+           (xRec."Align to Month" <> "Align to Month") or
+           (xRec."Prorate Partial Period" <> "Prorate Partial Period") then begin
+            // Rebuild lines that inherit header values (no overrides)
+            ContractLine.SetRange("Contract No.", "Contract No.");
+            ContractLine.SetRange(Frequency, ContractLine.Frequency::" "); // Empty = inherit
+            if ContractLine.FindSet() then
+                repeat
+                    if ContractLine.Status = ContractLine.Status::Active then
+                        ContractBillingMgt.RebuildUnbilledDetailsForLine(ContractLine);
+                until ContractLine.Next() = 0;
+        end;
     end;
 }
