@@ -1,3 +1,7 @@
+// OpenClaw Contract Management Extension
+// Version: 1.0.0.1 - Updated for BC 27 tenant parameter fix test
+// GitHub: johntaylormfc/openclaw-contract-management
+
 table 50102 "Contract Billing"
 {
     DataClassification = ToBeClassified;
